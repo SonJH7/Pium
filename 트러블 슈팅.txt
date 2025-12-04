@@ -1,0 +1,88 @@
+-------------------------------- 1 -------------------------
+초기 학교 텀프로젝트이기 떄문에 학생용 학번을 추가했었는데 db에 업데이트안해서 
+
+pandas.errors.DatabaseError: Execution failed on sql 'SELECT common_name, total_users, completed_users, completion_rate FROM plant_completion_stats': 오류: "plant_completion_stats" 이름의 릴레이션(relation)이 없습니다 LINE 1: ...otal_users, completed_users, completion_rate FROM plant_comp... ^
+Traceback:
+File "C:\Users\User\Desktop\데베 텀프\venv\Lib\site-packages\streamlit\runtime\scriptrunner\exec_code.py", line 129, in exec_func_with_error_handling
+    result = func()
+             ^^^^^^
+File "C:\Users\User\Desktop\데베 텀프\venv\Lib\site-packages\streamlit\runtime\scriptrunner\script_runner.py", line 671, in code_to_exec
+    exec(code, module.__dict__)  # noqa: S102
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "C:\Users\User\Desktop\데베 텀프\app.py", line 127, in <module>
+    main()
+File "C:\Users\User\Desktop\데베 텀프\app.py", line 120, in main
+    admin.admin_view()
+File "C:\Users\User\Desktop\데베 텀프\admin.py", line 105, in admin_view
+    dashboard_view()
+File "C:\Users\User\Desktop\데베 텀프\admin.py", line 16, in dashboard_view
+    df_stats = pd.read_sql("SELECT common_name, total_users, completed_users, completion_rate FROM plant_completion_stats", conn)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "C:\Users\User\Desktop\데베 텀프\venv\Lib\site-packages\pandas\io\sql.py", line 708, in read_sql
+    return pandas_sql.read_query(
+           ^^^^^^^^^^^^^^^^^^^^^^
+File "C:\Users\User\Desktop\데베 텀프\venv\Lib\site-packages\pandas\io\sql.py", line 2728, in read_query
+    cursor = self.execute(sql, params)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+File "C:\Users\User\Desktop\데베 텀프\venv\Lib\site-packages\pandas\io\sql.py", line 2676, in execute
+    raise ex from exc
+
+pandas.errors.DatabaseError: Execution failed on sql 'SELECT common_name, total_users, completed_users, completion_rate FROM plant_completion_stats': 오류: "plant_completion_stats" 이름의 릴레이션(relation)이 없습니다 LINE 1: ...otal_users, completed_users, completion_rate FROM plant_comp... ^
+Traceback:
+File "C:\Users\User\Desktop\데베 텀프\venv\Lib\site-packages\streamlit\runtime\scriptrunner\exec_code.py", line 129, in exec_func_with_error_handling
+    result = func()
+             ^^^^^^
+File "C:\Users\User\Desktop\데베 텀프\venv\Lib\site-packages\streamlit\runtime\scriptrunner\script_runner.py", line 671, in code_to_exec
+    exec(code, module.__dict__)  # noqa: S102
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "C:\Users\User\Desktop\데베 텀프\app.py", line 127, in <module>
+    main()
+File "C:\Users\User\Desktop\데베 텀프\app.py", line 120, in main
+    admin.admin_view()
+File "C:\Users\User\Desktop\데베 텀프\admin.py", line 105, in admin_view
+    dashboard_view()
+File "C:\Users\User\Desktop\데베 텀프\admin.py", line 16, in dashboard_view
+    df_stats = pd.read_sql("SELECT common_name, total_users, completed_users, completion_rate FROM plant_completion_stats", conn)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "C:\Users\User\Desktop\데베 텀프\venv\Lib\site-packages\pandas\io\sql.py", line 708, in read_sql
+    return pandas_sql.read_query(
+           ^^^^^^^^^^^^^^^^^^^^^^
+File "C:\Users\User\Desktop\데베 텀프\venv\Lib\site-packages\pandas\io\sql.py", line 2728, in read_query
+    cursor = self.execute(sql, params)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+File "C:\Users\User\Desktop\데베 텀프\venv\Lib\site-packages\pandas\io\sql.py", line 2676, in execute
+    raise ex from exc
+
+이 두개의 에러 발생
+
+---> 아래 코드로 해결
+-- 1. 식물별 졸업률 통계 뷰 (이게 없어서 에러 남)
+CREATE OR REPLACE VIEW plant_completion_stats AS
+SELECT
+  s.species_id,
+  s.common_name,
+  s.category,
+  COUNT(DISTINCT up.user_id) AS total_users,
+  COUNT(DISTINCT up.user_id) FILTER (WHERE up.is_completed) AS completed_users,
+  CASE
+    WHEN COUNT(DISTINCT up.user_id) = 0 THEN 0
+    ELSE ROUND(
+      100.0 * COUNT(DISTINCT up.user_id) FILTER (WHERE up.is_completed)
+      / COUNT(DISTINCT up.user_id)
+    , 1)
+  END AS completion_rate
+FROM plant_species s
+LEFT JOIN user_plant up ON s.species_id = up.species_id
+GROUP BY s.species_id, s.common_name, s.category;
+
+-- 2. (혹시 몰라서 추가) 포인트 분포 뷰
+CREATE OR REPLACE VIEW point_distribution AS
+SELECT
+  (points / 1000) * 1000 AS bucket_start,
+  COUNT(*) AS user_count
+FROM user_account
+GROUP BY bucket_start
+ORDER BY bucket_start;
+
+
+-------------------------------- 2 -------------------------
