@@ -31,7 +31,8 @@ CREATE TABLE plant_species (
     category       VARCHAR(20) NOT NULL,
     difficulty     SMALLINT,
     sun_level      VARCHAR(20),
-    image_url      VARCHAR(255)
+    image_url      TEXT,
+    description    TEXT
 );
 
 CREATE TABLE species_step (
