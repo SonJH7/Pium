@@ -27,17 +27,22 @@ def manage_plants_and_quizzes():
     """식물 및 퀴즈 데이터 CRUD + 식물 신청 관리"""
     st.markdown("#### 🌱 식물 및 퀘스트 데이터 관리")
     
-    # 탭을 5개로 확장 (맨 앞에 신청 내역 탭 추가)
-    tab_req, tab1, tab2, tab3, tab4 = st.tabs(["📩 식물 신청 내역", "1단계: 새 식물 등록", "2단계: 퀴즈 추가", "3단계: 퀴즈 수정", "🚨 4단계: 식물 삭제"])
+    # 탭 확장: [식물 정보 수정] 탭 추가됨
+    tab_req, tab1, tab1_edit, tab2, tab3, tab4 = st.tabs([
+        "📩 신청 내역", 
+        "1. 새 식물 등록", 
+        "1.5. 식물 정보 수정", 
+        "2. 퀴즈 추가", 
+        "3. 퀴즈 수정", 
+        "🚨 4. 식물 삭제"
+    ])
     
     conn = get_conn()
     cursor = conn.cursor()
 
-    # --- [NEW] 탭 0: 유저들의 식물 신청 내역 ---
+    # --- 탭 0: 식물 신청 내역 ---
     with tab_req:
         st.info("유저들이 도감에 추가해달라고 요청한 식물 목록입니다.")
-        
-        # PENDING 상태인 요청만 조회 (최신순)
         sql_req = """
             SELECT r.request_id, r.plant_name, u.name, u.department, r.created_at
             FROM plant_request r
@@ -49,38 +54,22 @@ def manage_plants_and_quizzes():
         requests = cursor.fetchall()
         
         if not requests:
-            st.success("대기 중인 신청이 없습니다. (모두 처리됨)")
+            st.success("대기 중인 신청이 없습니다.")
         else:
             for req in requests:
                 req_id, p_name, u_name, dept, date = req
-                
                 with st.expander(f"📌 요청: **{p_name}** (신청자: {u_name})"):
-                    st.write(f"- 신청일: {date}")
-                    st.write(f"- 소속: {dept}")
-                    st.caption("이 식물을 '1단계: 새 식물 등록' 탭에서 등록한 후, 아래 완료 버튼을 눌러주세요.")
-                    
+                    st.write(f"- 신청일: {date} | 소속: {dept}")
                     c1, c2 = st.columns(2)
                     with c1:
-                        if st.button("✅ 처리 완료 (등록함)", key=f"done_req_{req_id}"):
-                            # 상태를 DONE으로 변경, 처리자(현재 로그인한 관리자) 기록
-                            cursor.execute("""
-                                UPDATE plant_request 
-                                SET status='DONE', processed_by=%s 
-                                WHERE request_id=%s
-                            """, (st.session_state.user['user_id'], req_id))
+                        if st.button("✅ 처리 완료", key=f"done_{req_id}"):
+                            cursor.execute("UPDATE plant_request SET status='DONE', processed_by=%s WHERE request_id=%s", (st.session_state.user['user_id'], req_id))
                             conn.commit()
-                            st.success(f"'{p_name}' 요청을 처리 완료했습니다.")
                             st.rerun()
-                            
                     with c2:
-                        if st.button("❌ 거절 (반려)", key=f"rej_req_{req_id}"):
-                            cursor.execute("""
-                                UPDATE plant_request 
-                                SET status='REJECTED', processed_by=%s 
-                                WHERE request_id=%s
-                            """, (st.session_state.user['user_id'], req_id))
+                        if st.button("❌ 거절", key=f"rej_{req_id}"):
+                            cursor.execute("UPDATE plant_request SET status='REJECTED', processed_by=%s WHERE request_id=%s", (st.session_state.user['user_id'], req_id))
                             conn.commit()
-                            st.warning("요청을 거절했습니다.")
                             st.rerun()
 
     # --- 탭 1: 식물 등록 ---
@@ -94,9 +83,7 @@ def manage_plants_and_quizzes():
             diff = c3.slider("게임 난이도", 1, 5, 2)
             sun = c4.selectbox("광량", ["Low", "Mid", "High"])
             img_url = st.text_input("이미지 URL")
-            
-            st.markdown("**📖 식물 도감 상세 정보**")
-            description = st.text_area("식물 설명 (특징, 유래, 관리법 등)", height=150, max_chars=2000)
+            description = st.text_area("식물 설명", height=150, max_chars=2000)
             
             if st.form_submit_button("식물 등록"):
                 try:
@@ -109,15 +96,68 @@ def manage_plants_and_quizzes():
                 except Exception as e:
                     st.error(f"오류: {e}")
 
+    # --- [NEW] 탭 1.5: 식물 정보 수정 ---
+    with tab1_edit:
+        st.info("이미 등록된 식물의 정보(이름, 설명, 사진 등)를 수정합니다.")
+        
+        # 식물 선택
+        cursor.execute("SELECT species_id, common_name FROM plant_species ORDER BY species_id")
+        all_plants = cursor.fetchall()
+        p_dict = {p[1]: p[0] for p in all_plants}
+        
+        if all_plants:
+            edit_name = st.selectbox("수정할 식물 선택", list(p_dict.keys()), key="edit_plant_sel")
+            edit_pid = p_dict[edit_name]
+            
+            # 기존 정보 불러오기
+            cursor.execute("SELECT common_name, category, difficulty, sun_level, image_url, description FROM plant_species WHERE species_id=%s", (edit_pid,))
+            cur_info = cursor.fetchone()
+            
+            if cur_info:
+                # 폼에 기존 값 미리 채워넣기
+                with st.form(key="edit_plant_form"):
+                    ec1, ec2 = st.columns(2)
+                    new_name = ec1.text_input("식물 이름", value=cur_info[0])
+                    
+                    # Selectbox 인덱스 찾기
+                    cats = ["leaf", "flower", "fruit", "succulent"]
+                    cat_idx = cats.index(cur_info[1]) if cur_info[1] in cats else 0
+                    new_cat = ec2.selectbox("카테고리", cats, index=cat_idx)
+                    
+                    ec3, ec4 = st.columns(2)
+                    new_diff = ec3.slider("게임 난이도", 1, 5, value=cur_info[2])
+                    
+                    suns = ["Low", "Mid", "High"]
+                    sun_idx = suns.index(cur_info[3]) if cur_info[3] in suns else 1
+                    new_sun = ec4.selectbox("광량", suns, index=sun_idx)
+                    
+                    new_img = st.text_input("이미지 URL", value=cur_info[4] if cur_info[4] else "")
+                    new_desc = st.text_area("식물 설명", value=cur_info[5] if cur_info[5] else "", height=150)
+                    
+                    if st.form_submit_button("수정 내용 저장"):
+                        try:
+                            cursor.execute("""
+                                UPDATE plant_species 
+                                SET common_name=%s, category=%s, difficulty=%s, sun_level=%s, image_url=%s, description=%s
+                                WHERE species_id=%s
+                            """, (new_name, new_cat, new_diff, new_sun, new_img, new_desc, edit_pid))
+                            conn.commit()
+                            st.success(f"'{new_name}' 정보가 수정되었습니다!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"수정 실패: {e}")
+        else:
+            st.warning("등록된 식물이 없습니다.")
+
     # --- 탭 2: 퀴즈 추가 ---
     with tab2:
         cursor.execute("SELECT species_id, common_name FROM plant_species ORDER BY species_id DESC")
         plants = cursor.fetchall()
-        plant_dict = {p[1]: p[0] for p in plants}
+        plant_dict_q = {p[1]: p[0] for p in plants}
         
         if plants:
-            sel_name = st.selectbox("식물 선택", list(plant_dict.keys()), key="add_q_sel")
-            sel_pid = plant_dict[sel_name]
+            sel_name_q = st.selectbox("식물 선택", list(plant_dict_q.keys()), key="add_q_sel")
+            sel_pid_q = plant_dict_q[sel_name_q]
             
             with st.form("add_step_form"):
                 c1, c2 = st.columns(2)
@@ -129,7 +169,7 @@ def manage_plants_and_quizzes():
                 
                 if st.form_submit_button("퀴즈 추가"):
                     cursor.execute("INSERT INTO species_step(species_id, step_order, stage_name, quiz_question, correct_answer, explanation) VALUES (%s, %s, %s, %s, %s, %s)", 
-                                   (sel_pid, step, stage, q, ans, expl))
+                                   (sel_pid_q, step, stage, q, ans, expl))
                     conn.commit()
                     st.success("추가 완료!")
 
@@ -137,11 +177,11 @@ def manage_plants_and_quizzes():
     with tab3:
         cursor.execute("SELECT species_id, common_name FROM plant_species ORDER BY species_id")
         all_plants = cursor.fetchall()
-        p_dict = {p[1]: p[0] for p in all_plants}
+        p_dict_eq = {p[1]: p[0] for p in all_plants}
         
         if all_plants:
-            target_name = st.selectbox("수정할 식물", list(p_dict.keys()), key="edit_q_sel")
-            target_pid = p_dict[target_name]
+            target_name = st.selectbox("수정할 식물", list(p_dict_eq.keys()), key="edit_q_sel")
+            target_pid = p_dict_eq[target_name]
             
             cursor.execute("SELECT step_id, step_order, stage_name, quiz_question, correct_answer, explanation FROM species_step WHERE species_id = %s ORDER BY step_order", (target_pid,))
             steps = cursor.fetchall()
@@ -152,7 +192,7 @@ def manage_plants_and_quizzes():
                 sel_data = step_options[sel_key]
                 s_id = sel_data[0]
                 
-                with st.form(key=f"edit_form_{s_id}"):
+                with st.form(key=f"edit_q_form_{s_id}"):
                     ec1, ec2 = st.columns(2)
                     new_order = ec1.number_input("단계", value=sel_data[1], min_value=1)
                     new_stage = ec2.text_input("이름", value=sel_data[2])
@@ -170,8 +210,7 @@ def manage_plants_and_quizzes():
 
     # --- 탭 4: 식물 삭제 ---
     with tab4:
-        st.warning("⚠️ 주의: 식물을 삭제하면 해당 식물을 키우던 모든 사용자의 데이터와 퀴즈 기록이 영구적으로 사라집니다.")
-        
+        st.warning("⚠️ 주의: 식물 삭제 시 관련 유저 데이터와 퀴즈가 모두 사라집니다.")
         cursor.execute("SELECT species_id, common_name FROM plant_species ORDER BY species_id")
         all_plants_del = cursor.fetchall()
         del_dict = {p[1]: p[0] for p in all_plants_del}
@@ -184,38 +223,25 @@ def manage_plants_and_quizzes():
             active_users = cursor.fetchone()[0]
             
             if active_users > 0:
-                st.error(f"🚨 현재 {active_users}명의 사용자가 이 식물을 키우고 있습니다!")
-            else:
-                st.info("현재 이 식물을 키우는 사용자는 없습니다.")
-
+                st.error(f"🚨 현재 {active_users}명이 키우는 중입니다!")
+            
             st.divider()
 
             if st.button("삭제하기", type="primary"):
                 st.session_state['delete_confirm_pid'] = del_pid
             
             if st.session_state.get('delete_confirm_pid') == del_pid:
-                st.markdown(f"""
-                <div style="background-color: #ffebee; padding: 20px; border-radius: 10px; border: 1px solid #ef9a9a;">
-                    <h4 style="color: #c62828;">💣 정말로 삭제하시겠습니까?</h4>
-                    <p><b>'{del_name}'</b> 데이터와 관련된 <b>모든 유저의 성장 기록</b>이 즉시 삭제됩니다.<br>
-                    작업은 되돌릴 수 없습니다.</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                col_d1, col_d2 = st.columns(2)
-                with col_d1:
-                    if st.button("네, 모든 데이터를 지우겠습니다", type="primary"):
-                        try:
-                            cursor.execute("DELETE FROM plant_species WHERE species_id = %s", (del_pid,))
-                            conn.commit()
-                            st.success(f"'{del_name}' 삭제가 완료되었습니다.")
-                            st.session_state['delete_confirm_pid'] = None
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"삭제 실패: {e}")
-                
-                with col_d2:
-                    if st.button("취소 (유지)"):
+                st.error(f"정말로 '{del_name}' 데이터를 영구 삭제하시겠습니까?")
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("네, 삭제합니다", type="primary"):
+                        cursor.execute("DELETE FROM plant_species WHERE species_id = %s", (del_pid,))
+                        conn.commit()
+                        st.success("삭제 완료")
+                        st.session_state['delete_confirm_pid'] = None
+                        st.rerun()
+                with c2:
+                    if st.button("취소"):
                         st.session_state['delete_confirm_pid'] = None
                         st.rerun()
 
@@ -228,6 +254,5 @@ def content_mgr_view():
 
     st.header("📝 콘텐츠 관리자 페이지")
     tab1, tab2 = st.tabs(["🌱 식물/퀴즈 데이터", "💰 게임 경제 설정"])
-    
     with tab1: manage_plants_and_quizzes()
     with tab2: manage_game_config()
