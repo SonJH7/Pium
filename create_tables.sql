@@ -135,8 +135,8 @@ ORDER BY bucket_start;
 INSERT INTO user_account(login_id, password_hash, student_id, name, department, role, points) VALUES
 ('admin',   '1234', '999999999', '관리자',   '대학본부',       'Admin', 99999),
 ('user1',   '1234', '202312345', '김철수',   '컴퓨터공학과',   'User',  1000),
-('user2',   '1234', '202356789', '이영희',   '원예생명과학과', 'User',  1000),
-('expert1', '1234', '202011111', '박박사',   '식물의학전공',   'Expert', 2000);
+('expert1', '1234', '202011111', '박박사',   '식물의학전공',   'Expert', 2000),
+('content', '1234', '99990001', '콘텐츠 관리자',     '교육운영팀',     'Content', 0);
 
 INSERT INTO game_config(config_key, config_value) VALUES
 ('revive_cost', '300'),

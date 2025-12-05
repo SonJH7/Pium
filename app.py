@@ -3,6 +3,7 @@ import auth
 import plant
 import game
 import expert
+import content_mgr 
 import admin
 
 def init_session():
@@ -15,7 +16,7 @@ def init_session():
 def main():
     # 1. 페이지 기본 설정
     st.set_page_config(
-        page_title="P-Plant: 대학생 식물 키우기", 
+        page_title="Pium: 인터랙티브 식물 도감", 
         layout="wide", 
         page_icon="🌱"
     )
@@ -25,7 +26,7 @@ def main():
     col1, col2 = st.columns([3, 1])
     
     with col1:
-        st.title("🌱 P-Plant: 인터랙티브 식물 도감")
+        st.title("🌱 Pium: 인터랙티브 식물 도감")
         st.caption("식물을 검색하고, 퀴즈를 풀며 내 정원을 가꿔보세요!")
     
     with col2:
@@ -52,7 +53,7 @@ def main():
         auth.auth_view()
         return  # 로그인 창이 떠있으면 아래 메인 화면은 가림
 
-    # 4. 사이드바 메뉴 구성
+    # 4. 사이드바 메뉴 구성 (역할 기반 접근 제어)
     st.sidebar.header("메뉴 선택")
     
     # 기본 메뉴
@@ -61,17 +62,26 @@ def main():
     # 로그인한 유저만 보이는 메뉴
     if st.session_state.user:
         role = st.session_state.user["role"]
+        
+        # [Player] 모든 로그인 유저
         menu_options.append("🌿 내 식물 키우기 (게임)")
         
-        # 전문가/관리자 전용 메뉴 (권한별 분기)
-        if role in ["Expert", "Admin"]:
-            menu_options.append("🎓 전문가 페이지")
-        if role in ["Admin"]:
-            menu_options.append("⚙️ 관리자 설정")
+        # [Expert] 전문가, 콘텐츠 관리자, 관리자 접근 가능
+        if role in ["Expert", "Content", "Admin"]:
+            menu_options.append("🎓 전문가: 팁 작성")
+            
+        # [Content Manager] 콘텐츠 관리자, 관리자 접근 가능 (식물/경제 설정)
+        if role in ["Content", "Admin"]:
+            menu_options.append("📝 콘텐츠 관리 (식물/경제)")
+            
+        # [System Admin] 시스템 관리자만 접근 가능 (계정/로그)
+        if role == "Admin":
+            menu_options.append("⚙️ 시스템 관리 (계정/로그)")
 
     choice = st.sidebar.radio("이동할 페이지를 선택하세요", menu_options)
 
     # --- 전문가 신청 기능 (거절된 경우 재신청 가능) ---
+    # 일반 유저(User)일 때만 사이드바에 표시
     if st.session_state.user and st.session_state.user['role'] == 'User':
         st.sidebar.markdown("---")
         with st.sidebar.expander("🎓 전문가 등급 신청"):
@@ -129,27 +139,26 @@ def main():
 
     # 5. 페이지 라우팅 (선택한 메뉴에 따라 화면 표시)
     if choice == "🏠 홈 / 도감 검색":
-        # plant.py의 함수 호출
         plant.plant_search_view()
         
     elif choice == "🌿 내 식물 키우기 (게임)":
-        # game.py의 함수 호출
         game.game_view()
         
-    elif choice == "🎓 전문가 페이지":
-        st.subheader("🎓 전문가 전용 페이지")
-        st.info("이 기능은 전문가(Expert) 권한을 가진 사용자만 접근 가능합니다.")
+    elif choice == "🎓 전문가: 팁 작성":
         expert.expert_view()
         
-    elif choice == "⚙️ 관리자 설정":
-        st.subheader("⚙️ 시스템 관리자 페이지")
-        st.info("관리자(Admin) 권한을 가진 사용자만 접근 가능합니다.")
+    elif choice == "📝 콘텐츠 관리 (식물/경제)":
+        # [NEW] 식물 데이터 CRUD 및 경제 파라미터 조정
+        content_mgr.content_mgr_view()
+        
+    elif choice == "⚙️ 시스템 관리 (계정/로그)":
+        # [UPDATE] 회원 권한 관리 및 로그 조회
         admin.admin_view()    
 
-    # 6. 하단 푸터 (선택 사항)
+    # 6. 하단 푸터
     st.markdown("---")
     st.caption("2025 Database Project")
-    st.caption("© 부산대학교 정보컴퓨터공학부 202355545 손정훈,202355625 박소영의 식물도감 app")
+    st.caption("© 부산대학교 정보컴퓨터공학부 202355545 손정훈, 202355625 박소영의 식물도감 app")
 
 if __name__ == "__main__":
     main()
