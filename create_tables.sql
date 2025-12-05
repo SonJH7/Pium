@@ -1,9 +1,9 @@
 -- [1. 기존 테이블/뷰 삭제]
+DROP VIEW IF EXISTS active_department_stats;
 DROP VIEW IF EXISTS plant_completion_stats CASCADE;
 DROP VIEW IF EXISTS point_distribution CASCADE;
 DROP TABLE IF EXISTS tip_report CASCADE;       
 DROP TABLE IF EXISTS audit_log CASCADE;
-DROP TABLE IF EXISTS audit_log cascade;        
 DROP TABLE IF EXISTS quiz_attempt CASCADE;
 DROP TABLE IF EXISTS user_plant CASCADE;
 DROP TABLE IF EXISTS expert_tip CASCADE;
@@ -38,8 +38,8 @@ CREATE TABLE plant_species (
     category       VARCHAR(20) NOT NULL,
     difficulty     SMALLINT,
     sun_level      VARCHAR(20),
-    image_url      VARCHAR(255),
-    description    TEXT  -- [추가됨]
+    image_url      TEXT,
+    description    TEXT  
 );
 
 -- 3. 성장 단계 + 퀴즈
@@ -174,6 +174,15 @@ FROM user_account
 GROUP BY bucket_start
 ORDER BY bucket_start;
 
+CREATE OR REPLACE VIEW active_department_stats AS
+SELECT
+    department,
+    COUNT(user_id) as active_user_count,
+    AVG(points) as avg_points
+FROM user_account
+GROUP BY department
+HAVING COUNT(user_id) >= 1;
+
 -- [4. 기초 데이터 입력]
 INSERT INTO user_account(login_id, password_hash, student_id, name, department, role, points) VALUES
 ('admin',   '1234', '999999999', '관리자',   '대학본부',       'Admin', 99999),
@@ -185,9 +194,29 @@ INSERT INTO game_config(config_key, config_value) VALUES
 ('revive_cost', '300'),
 ('quiz_reward', '100');
 
-INSERT INTO plant_species(common_name, category, difficulty, sun_level, image_url) VALUES
+INSERT INTO plant_species(common_name, category, difficulty, sun_level, image_url, description) VALUES
 ('몬스테라', 'leaf', 2, 'Mid', 'https://i.namu.wiki/i/ddIQpxcFo4JYdcinRHH9BCVawzyBK7QiqkvNbz_ELjl62GvRcpaJimIOfxiAlxYTYaBIUIOC_iTCF1IlNOIB1A.webp');
 
 INSERT INTO species_step(species_id, step_order, stage_name, quiz_question, correct_answer, explanation) VALUES
 (1, 1, 'Seed',   '몬스테라는 직사광선을 아주 좋아한다 (O/X)?', FALSE, '잎이 탈 수 있으니 간접광이 좋습니다.'),
 (1, 2, 'Sprout', '몬스테라는 물을 줄 때 흙이 마른 것을 확인해야 한다 (O/X)?', TRUE, '과습에 주의해야 합니다.');
+
+-- [6] DB 권한 관리 (Authorization - GRANT/REVOKE)
+-- 주의: 이 부분은 Supabase/Postgres에서 '이미 존재하는 역할' 에러가 날 수 있으므로
+--       스크립트를 반복 실행할 때는 에러를 무시하거나 DO 블록을 사용해야 함.
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'app_admin') THEN
+    CREATE ROLE app_admin NOLOGIN;
+  END IF;
+  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'app_readonly') THEN
+    CREATE ROLE app_readonly NOLOGIN;
+  END IF;
+END
+$$;
+
+-- 권한 부여
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO app_admin;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO app_readonly;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_admin;
