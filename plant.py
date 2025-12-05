@@ -43,7 +43,6 @@ def plant_search_view():
     # --- 결과 출력 ---
     st.divider()
     
-    # [수정됨] 검색 결과가 없을 때 -> 식물 신청 폼 표시
     if not rows:
         st.warning(f"🤔 '{search_term}'에 대한 검색 결과가 없습니다.")
         
@@ -54,14 +53,12 @@ def plant_search_view():
             st.write("관리자에게 식물 추가를 요청해보세요! 검토 후 도감에 추가됩니다.")
             
             with st.form("request_plant_form"):
-                # 검색어가 있으면 자동으로 채워줌
                 req_name = st.text_input("신청할 식물 이름", value=search_term if search_term else "")
                 submitted = st.form_submit_button("🌱 식물 등록 신청하기")
                 
                 if submitted:
                     if req_name:
                         try:
-                            # plant_request 테이블에 저장
                             cursor.execute("""
                                 INSERT INTO plant_request (requester_id, plant_name, status)
                                 VALUES (%s, %s, 'PENDING')
@@ -75,7 +72,6 @@ def plant_search_view():
         else:
             st.info("로그인하시면 없는 식물을 신청할 수 있습니다.")
             
-    # 검색 결과가 있을 때
     else:
         st.markdown(f"총 **{len(rows)}**개의 식물이 발견되었습니다.")
         
@@ -97,6 +93,57 @@ def plant_search_view():
                         st.info(desc)
                     else:
                         st.caption("등록된 상세 정보가 없습니다.")
+                    
+                    # --- [수정됨] 전문가 팁 조회 및 신고 기능 ---
+                    # 팁 ID(t.tip_id)도 함께 조회하도록 쿼리 수정
+                    cursor.execute("""
+                        SELECT t.tip_id, t.title, t.content, u.name, t.created_at
+                        FROM expert_tip t
+                        JOIN user_account u ON t.expert_id = u.user_id
+                        WHERE t.species_id = %s AND t.is_hidden = FALSE
+                        ORDER BY t.created_at DESC
+                    """, (s_id,))
+                    tips = cursor.fetchall()
+
+                    if tips:
+                        st.write("") 
+                        with st.expander(f"🎓 전문가 팁 확인하기 ({len(tips)}개)", expanded=False):
+                            for tip in tips:
+                                t_id, t_title, t_content, t_author, t_date = tip
+                                
+                                # 팁 내용 표시 컨테이너
+                                with st.container():
+                                    st.markdown(f"**💡 {t_title}**")
+                                    st.caption(f"작성자: {t_author} | {t_date.strftime('%Y-%m-%d')}")
+                                    st.write(t_content)
+                                    
+                                    # [신고 버튼 영역]
+                                    if st.session_state.user:
+                                        # 신고하기 팝오버 (Streamlit 1.33+ 기능, 구버전이면 expander 사용)
+                                        with st.popover("🚨 신고하기", use_container_width=False):
+                                            st.markdown("##### 🚨 부적절한 팁 신고")
+                                            with st.form(key=f"report_form_{t_id}"):
+                                                reason = st.text_area("신고 사유를 입력해주세요", placeholder="예: 잘못된 정보, 욕설/비방 등")
+                                                report_btn = st.form_submit_button("신고 제출")
+                                                
+                                                if report_btn and reason:
+                                                    try:
+                                                        # 중복 신고 방지 (선택 사항)
+                                                        cursor.execute("SELECT 1 FROM tip_report WHERE tip_id=%s AND reporter_id=%s", (t_id, st.session_state.user['user_id']))
+                                                        if cursor.fetchone():
+                                                            st.warning("이미 신고한 게시물입니다.")
+                                                        else:
+                                                            cursor.execute("""
+                                                                INSERT INTO tip_report (tip_id, reporter_id, reason)
+                                                                VALUES (%s, %s, %s)
+                                                            """, (t_id, st.session_state.user['user_id'], reason))
+                                                            conn.commit()
+                                                            st.success("신고가 접수되었습니다. 관리자가 검토할 예정입니다.")
+                                                    except Exception as e:
+                                                        st.error(f"오류 발생: {e}")
+                                    st.markdown("---")
+                    else:
+                        st.caption("아직 등록된 전문가 팁이 없습니다.")
                     
                     st.divider()
                     
