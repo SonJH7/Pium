@@ -3,18 +3,61 @@ import auth
 import plant
 import game
 import expert
-import content_mgr 
+import content_mgr
 import admin
 
 def init_session():
-    """세션 초기화: 새로고침 해도 로그인 데이터가 유지되도록 설정"""
+    """세션 초기화"""
     if "user" not in st.session_state:
         st.session_state.user = None
     if "show_auth" not in st.session_state:
         st.session_state.show_auth = False
 
+def get_role_badge(role):
+    """역할에 따른 HTML 배지 디자인 반환"""
+    
+    # 역할별 디자인 설정 (배경색, 글자색, 아이콘, 표시 이름)
+    badges = {
+        "User": {
+            "bg": "#e8f5e9", "color": "#2e7d32", "border": "#c8e6c9",
+            "icon": "🌱", "label": "새싹 농부"
+        },
+        "Expert": {
+            "bg": "#fff8e1", "color": "#f9a825", "border": "#ffe082",
+            "icon": "🎓", "label": "식물 전문가"
+        },
+        "Content": {
+            "bg": "#e3f2fd", "color": "#1565c0", "border": "#bbdefb",
+            "icon": "📝", "label": "콘텐츠 에디터"
+        },
+        "Admin": {
+            "bg": "#ffebee", "color": "#c62828", "border": "#ffcdd2",
+            "icon": "🛡️", "label": "시스템 관리자"
+        }
+    }
+    
+    # 기본값 (User)
+    style = badges.get(role, badges["User"])
+    
+    html = f"""
+    <span style='
+        display: inline-flex;
+        align-items: center;
+        background-color: {style['bg']};
+        color: {style['color']};
+        border: 1px solid {style['border']};
+        padding: 4px 10px;
+        border-radius: 15px;
+        font-weight: 600;
+        font-size: 14px;
+        margin-bottom: 5px;
+    '>
+        <span style='margin-right: 6px;'>{style['icon']}</span> {style['label']}
+    </span>
+    """
+    return html
+
 def main():
-    # 1. 페이지 기본 설정
     st.set_page_config(
         page_title="Pium: 인터랙티브 식물 도감", 
         layout="wide", 
@@ -22,80 +65,84 @@ def main():
     )
     init_session()
 
-    # 2. 상단 헤더 영역 (제목 + 로그인 정보)
-    col1, col2 = st.columns([3, 1])
+    # --- 헤더 영역 ---
+    col1, col2 = st.columns([3, 1.2])
     
     with col1:
         st.title("🌱 Pium: 인터랙티브 식물 도감")
-        st.caption("식물을 검색하고, 퀴즈를 풀며 내 정원을 가꿔보세요!")
+        st.caption("식물을 검색하고, 퀴즈를 풀며 나만의 정원을 '피움(Pium)'하세요!")
     
     with col2:
-        # 로그인 상태가 아닐 때
         if st.session_state.user is None:
+            st.write("") # 간격 맞춤
             if st.button("로그인 / 회원가입", use_container_width=True):
                 st.session_state.show_auth = True
-        
-        # 로그인 상태일 때
         else:
             u = st.session_state.user
-            # 대학생 프로젝트답게 학번/학과 표시
-            st.success(f"👤 {u['name']}님 ({u['department']})")
-            st.markdown(f"**학번:** {u['student_id']} | **포인트:** {u['points']} P")
             
-            if st.button("로그아웃", use_container_width=True):
-                st.session_state.user = None
-                st.rerun()
+            # [변경됨] 역할 배지 표시
+            role_badge_html = get_role_badge(u['role'])
+            
+            with st.container(border=True):
+                # 배지와 이름 표시
+                st.markdown(f"{role_badge_html} &nbsp; **{u['name']}**님", unsafe_allow_html=True)
+                st.caption(f"{u['department']} | {u['student_id']}")
+                st.markdown(f"💰 **포인트:** :green[{u['points']:,} P]")
+                
+                if st.button("로그아웃", use_container_width=True, key="logout_btn"):
+                    st.session_state.user = None
+                    st.rerun()
 
     st.markdown("---")
 
-    # 3. 로그인/회원가입 모달 처리
+    # --- 모달 ---
     if st.session_state.show_auth:
         auth.auth_view()
-        return  # 로그인 창이 떠있으면 아래 메인 화면은 가림
+        return
 
-    # 4. 사이드바 메뉴 구성 (역할 기반 접근 제어)
-    st.sidebar.header("메뉴 선택")
+    # --- 사이드바 ---
+    st.sidebar.header("User Menu")
     
-    # 기본 메뉴
-    menu_options = ["🏠 홈 / 도감 검색"]
-    
-    # 로그인한 유저만 보이는 메뉴
+    # 사이드바에도 배지 표시 (로그인 시)
     if st.session_state.user:
-        role = st.session_state.user["role"]
-        
-        # [Player] 모든 로그인 유저
-        menu_options.append("🌿 내 식물 키우기 (게임)")
-        
-        # [Expert] 전문가, 콘텐츠 관리자, 관리자 접근 가능
-        if role in ["Expert", "Content", "Admin"]:
-            menu_options.append("🎓 전문가: 팁 작성")
-            
-        # [Content Manager] 콘텐츠 관리자, 관리자 접근 가능 (식물/경제 설정)
-        if role in ["Content", "Admin"]:
-            menu_options.append("📝 콘텐츠 관리 (식물/경제)")
-            
-        # [System Admin] 시스템 관리자만 접근 가능 (계정/로그)
-        if role == "Admin":
-            menu_options.append("⚙️ 시스템 관리 (계정/로그)")
+        u = st.session_state.user
+        st.sidebar.markdown(get_role_badge(u['role']), unsafe_allow_html=True)
+        st.sidebar.markdown(f"**{u['name']}**님 환영합니다!")
+        st.sidebar.divider()
 
-    choice = st.sidebar.radio("이동할 페이지를 선택하세요", menu_options)
+    menu = ["🏠 홈 / 도감"]
+    
+    if st.session_state.user:
+        role = st.session_state.user['role']
+        
+        # 1. 플레이어 기능
+        menu.append("🌿 내 식물 키우기")
+        
+        # 2. 전문가 기능
+        if role in ['Expert', 'Content', 'Admin']:
+            menu.append("🎓 전문가: 팁 작성")
+            
+        # 3. 콘텐츠 관리자 기능
+        if role in ['Content', 'Admin']:
+            menu.append("📝 콘텐츠 관리 (식물/경제)")
+            
+        # 4. 시스템 관리자 기능
+        if role == 'Admin':
+            menu.append("⚙️ 시스템 관리 (계정/로그)")
 
-    # --- 전문가 신청 기능 (거절된 경우 재신청 가능) ---
-    # 일반 유저(User)일 때만 사이드바에 표시
+    choice = st.sidebar.radio("Go to", menu)
+    
+    # 전문가 신청 버튼 (User일 때만)
     if st.session_state.user and st.session_state.user['role'] == 'User':
         st.sidebar.markdown("---")
         with st.sidebar.expander("🎓 전문가 등급 신청"):
-            
             conn = auth.get_conn()
             cur = conn.cursor()
             
-            # 1. 현재 신청 상태 확인
             cur.execute("SELECT status FROM expert_application WHERE user_id=%s", (st.session_state.user['user_id'],))
             row = cur.fetchone()
-            
             can_apply = True
             
-            # 이미 신청 기록이 있는 경우 상태 체크
             if row:
                 status = row[0]
                 if status == 'PENDING':
@@ -106,56 +153,42 @@ def main():
                     can_apply = False
                 elif status == 'REJECTED':
                     st.error("반려되었습니다. 내용을 보완해 다시 신청하세요.")
-                    # can_apply는 True로 유지 (재신청 허용)
 
-            # 2. 신청 폼 (신청 가능할 때만 보임)
             if can_apply:
                 with st.form("expert_apply_form"):
-                    st.write("식물에 대한 전문 지식이 있으신가요?")
-                    reason = st.text_area("신청 사유", height=100, placeholder="예: 원예학과 4학년, 식물 관리사 자격증 보유 등")
+                    st.write("전문 지식이 있으신가요?")
+                    reason = st.text_area("신청 사유", height=80, placeholder="학과, 자격증 등")
                     submitted = st.form_submit_button("신청서 제출")
                     
                     if submitted and reason:
                         try:
-                            # 3. UPSERT 쿼리 (없으면 INSERT, 있으면 상태를 PENDING으로 UPDATE)
                             upsert_sql = """
                                 INSERT INTO expert_application (user_id, request_text, status, decided_at)
                                 VALUES (%s, %s, 'PENDING', NULL)
-                                ON CONFLICT (user_id) 
-                                DO UPDATE SET 
-                                    request_text = EXCLUDED.request_text,
-                                    status = 'PENDING',
-                                    decided_at = NULL;
+                                ON CONFLICT (user_id) DO UPDATE SET 
+                                    request_text = EXCLUDED.request_text, status = 'PENDING';
                             """
                             cur.execute(upsert_sql, (st.session_state.user['user_id'], reason))
                             conn.commit()
-                            st.success("제출 완료! 관리자 승인을 기다려주세요.")
+                            st.success("제출 완료!")
                             st.rerun()
                         except Exception as e:
                             st.error(f"오류: {e}")
-            
             conn.close()
-    # --------------------------------------------------------
 
-    # 5. 페이지 라우팅 (선택한 메뉴에 따라 화면 표시)
-    if choice == "🏠 홈 / 도감 검색":
+    # --- 라우팅 ---
+    if choice == "🏠 홈 / 도감":
         plant.plant_search_view()
-        
-    elif choice == "🌿 내 식물 키우기 (게임)":
+    elif choice == "🌿 내 식물 키우기":
         game.game_view()
-        
     elif choice == "🎓 전문가: 팁 작성":
         expert.expert_view()
-        
     elif choice == "📝 콘텐츠 관리 (식물/경제)":
-        # [NEW] 식물 데이터 CRUD 및 경제 파라미터 조정
         content_mgr.content_mgr_view()
-        
     elif choice == "⚙️ 시스템 관리 (계정/로그)":
-        # [UPDATE] 회원 권한 관리 및 로그 조회
-        admin.admin_view()    
+        admin.admin_view()
 
-    # 6. 하단 푸터
+    # --- 푸터 ---
     st.markdown("---")
     st.caption("2025 Database Project")
     st.caption("© 부산대학교 정보컴퓨터공학부 202355545 손정훈, 202355625 박소영의 식물도감 app")
