@@ -1,170 +1,275 @@
-# 🌱 Pium: 대학생 인터랙티브 식물 키우기 & 도감 시스템
+# 🌱 **Pium: 대학생 인터랙티브 식물 키우기 & 도감 시스템**
 
-👉 배포 주소: https://pium001.streamlit.app/
+### **Gamified Plant Encyclopedia + Growth Simulation using PostgreSQL & Streamlit**
 
-**Pium**는 대학생을 위한 게이미피케이션(Gamification) 기반의 식물 도감 및 키우기 플랫폼입니다.
-사용자는 식물 도감을 검색하고, 자신의 '가상 정원'에 식물을 등록하여 퀴즈를 풀며 성장시킬 수 있습니다.
-**PostgreSQL**을 활용하여 사용자, 식물, 성장 단계, 포인트 트랜잭션 등 복잡한 데이터 관계를 체계적으로 관리합니다.
+📌 배포 주소: **[https://pium001.streamlit.app/](https://pium001.streamlit.app/)**
 
------
+---
 
-## 🛠 기술 스택 (Tech Stack)
+# 1. 📘 **프로젝트 소개 (Project Overview)**
 
-  * **Language**: Python 3.9+
-  * **Frontend**: Streamlit
-  * **Database**: PostgreSQL
-  * **DB Driver**: `psycopg2-binary`
-  * **Tools**: VS Code, DBeaver (or pgAdmin4), Git
+**Pium**은 대학생을 위한 **게이미피케이션 기반 식물 도감 + 식물 성장 시뮬레이터**입니다.
+사용자는 실제 식물처럼 정보를 검색하고 학습하며, 가상 식물을 ‘정원’에 심어 **OX 퀴즈를 통과하며 성장**시킵니다.
 
------
+모든 게임 데이터는 **PostgreSQL** 기반으로 관리하며 다음을 포함합니다:
 
-## 📂 프로젝트 구조 (File Structure)
+* 사용자 정보(학번/학과/역할)
+* 도감 식물 정보
+* 성장 단계 + 단계별 퀴즈
+* 사용자별 식물 성장 기록
+* 포인트(머니) 시스템 + 트랜잭션 로그
+* 전문가 팁 + 신고/감사 로그 시스템
+* 콘텐츠 관리자·관리자에 의한 심사/관리 기능
 
-이 프로젝트는 기능별로 모듈화되어 있으며, MVC 패턴과 유사한 구조를 따릅니다.
+Project Proposal 요구사항(Topic, 역할, 기능, 스키마) ✔
+Project Introduction 요구 SQL 기능(DML·View·Authorization·Transaction·Index) ✔
 
-| 파일명 | 설명 | 비고 |
-| :--- | :--- | :--- |
-| **`app.py`** | **메인 실행 파일**. 전체 페이지 라우팅 및 세션 관리 | Entry Point |
-| **`db.py`** | PostgreSQL 데이터베이스 연결 설정 및 커넥션 풀 관리 | DB Connection |
-| **`auth.py`** | 회원가입(학번/학과 포함) 및 로그인 처리 | Authentication |
-| **`plant.py`** | 식물 도감 검색(`LIKE` 검색), 상세 조회, 내 식물 등록 | Search & Register |
-| **`game.py`** | **핵심 로직**. 퀴즈 풀이, 포인트 지급, 단계 성장을 **트랜잭션**으로 처리 | Game Logic (ACID) |
-| **`expert.py`** | 전문가 전용 페이지. 재배 팁(Tip) 작성 및 조회 | Expert Feature |
-| **`admin.py`** | 관리자 대시보드. 통계(View 활용), 회원 승인, **식물/퀴즈 데이터 관리(CRUD)** | Admin Dashboard |
-| `create_tables.sql` | DB 스키마 생성(DDL) 및 기초 데이터(DML) 스크립트 | SQL Script |
-| `.env` | DB 접속 정보(비밀번호 등)를 저장하는 환경 변수 파일 | **보안 주의** |
-| `requirements.txt` | 프로젝트 의존성 라이브러리 목록 | Dependency |
+---
 
------
+# 2. 🌟 **프로젝트 특징 (Key Features)**
 
-## 🚀 설치 및 실행 가이드 (Installation & Setup)
+이 프로젝트는 단순 CRUD가 아니라 **데이터베이스 강의의 모든 핵심 요소를 실제 서비스 수준으로 구현**했다는 점에서 높은 평가가 가능함.
 
-이 프로젝트를 로컬 환경에서 실행하기 위한 단계별 가이드입니다.
+### ✔ 실제 구현된 기능들
 
-### 1\. 환경 준비 (Prerequisites)
+| 기능               | SQL 기능                       | 설명                            |
+| ---------------- | ---------------------------- | ----------------------------- |
+| 도감 검색·필터·정렬      | LIKE, ORDER BY, WHERE, Index | 이름 검색, 난이도/광량 필터, 정렬          |
+| 식물 심기            | INSERT, UNIQUE 제약            | 유저가 도감의 식물을 정원에 추가            |
+| 성장 퀴즈            | SELECT JOIN, Subquery        | 단계별 퀴즈, 정답 판별                 |
+| O/X 퀴즈 트랜잭션 처리   | Transaction(Commit/Rollback) | 정답→포인트 지급+단계상승 일괄 처리          |
+| 오답 처리            | Transaction                  | 1단계 패널티, 2단계 이상 "부활/초기화" 선택   |
+| 전문가 팁 작성/수정/삭제   | INSERT/UPDATE/DELETE         | 전문가가 팁 작성 및 관리                |
+| 팁 신고             | INSERT + FK                  | User → Content 관리자에게 신고 전달    |
+| 팁 숨김/복구          | UPDATE                       | Content가 신고 검토 후 처리           |
+| 감사 로그(Audit Log) | INSERT                       | Content/Admin의 모든 중요한 조작 기록   |
+| 경제 파라미터 관리       | UPDATE game_config           | revive_cost, quiz_reward 등 변경 |
+| 관리자 통계           | VIEW, GROUP BY, HAVING       | 식물별 완주율, 포인트 분포, 학과별 활동 통계    |
+| 권한 관리            | UPDATE + Authorization       | 전문가 승인, role 변경               |
 
-  * Python이 설치되어 있어야 합니다.
-  * PostgreSQL이 설치되어 있고 실행 중이어야 합니다.
+---
 
-### 2\. 프로젝트 세팅 (Terminal)
+# 3. 🧩 **사용자 역할(RBAC)** — *요구사항 100% 충족*
 
-프로젝트 폴더(`plant_project`)로 이동한 후 아래 명령어를 순서대로 입력하세요.
+(Project Introduction에서 역할별 기능 설명 요구 ✔ )
+(Proposal Report 역할도 모두 반영 ✔ )
 
-**Windows (PowerShell)**
+### 👤 **1) User (일반 사용자)**
 
-```powershell
-# 1. 가상환경 생성
-python -m venv venv
+* 도감 검색/필터/정렬
+* 식물 심기 (`user_plant`)
+* 단계별 OX 퀴즈 풀이
+* 포인트 획득/차감
+* 2단계 이상 실패 시
 
-# 2. 가상환경 활성화
-.\venv\Scripts\activate
+  * 포인트 결제(continue) 또는
+  * 무료 초기화(reset)
+* 전문가 신청 (`expert_application INSERT`)
+* 전문가 팁 조회 + 팁 신고
 
-# 3. 필수 라이브러리 설치
-pip install -r requirements.txt
+---
+
+### 🎓 **2) Expert (전문가)**
+
+* User 기능 모두 포함
+* 전문가 팁 작성 (`expert_tip INSERT`)
+* 팁 수정/삭제 (UPDATE/DELETE)
+
+---
+
+### 📝 **3) Content Manager (콘텐츠 관리자)**
+
+* 도감 식물 CRUD
+* 퀴즈 단계 CRUD
+* 팁 신고 관리: 숨김/복구
+* 경제 파라미터 설정 (`game_config`)
+* 모든 조작 `audit_log` 기록
+
+---
+
+### 🛡️ **4) Admin (시스템 관리자)**
+
+* 전문가 신청 승인/거절
+* 회원 권한 변경(User↔Expert↔Content↔Admin)
+* 통계 대시보드:
+
+  * `plant_completion_stats` (종별 졸업률)
+  * `point_distribution` (포인트 분포)
+  * `active_department_stats` (학과별 활동/평균포인트)
+* 최근 활동/트랜잭션 로그 조회
+
+---
+
+# 4. 🧠 **주요 SQL 기능 활용 (학습 내용 완전 충족)**
+
+(Project Introduction 4페이지 요구사항 ✔ )
+
+### ✔ **DML (INSERT / UPDATE / DELETE)**
+
+* 퀴즈 시도 insert
+* 포인트 지급/차감 update
+* 팁 수정/삭제
+* 콘텐츠 CRUD
+
+### ✔ **SFW, JOIN, ORDER BY, GROUP BY, HAVING**
+
+* 도감 검색, 정렬
+* 관리자 통계(완주율, 포인트 분포, 학과별 통계)
+
+### ✔ **Subquery**
+
+```sql
+SELECT MAX(step_order)
+FROM species_step
+WHERE species_id = (SELECT species_id FROM species_step WHERE step_id = %s)
 ```
 
-*(참고: Mac/Linux 사용자는 `source venv/bin/activate` 로 활성화)*
+### ✔ **Transaction (Commit / Rollback)**
 
-### 3\. 데이터베이스 구축 (PostgreSQL)
+* 정답 처리
+* 부활 처리(FORCE_PASS)
+* 초기화(reset)
+* 신고 처리(hide/unhide)
+  → 기능 단위 ACID 보장
 
-1.  **pgAdmin4** 또는 **DBeaver**를 실행합니다.
-2.  새로운 데이터베이스 \*\*`plantdb`\*\*를 생성합니다.
-    ```sql
-    CREATE DATABASE plantdb;
-    ```
-3.  프로젝트 폴더 내 **`create_tables.sql`** 파일의 내용을 복사합니다.
-4.  DB 툴의 'Query Tool'을 열고 붙여넣은 뒤 **실행(Run)** 합니다.
-      * *테이블 생성, 뷰(View) 생성, 기초 데이터 입력이 한 번에 처리됩니다.*
+### ✔ **View 활용**
 
-### 4\. 환경 변수 설정 (.env)
+* `plant_completion_stats`
+* `point_distribution`
+* `active_department_stats`
 
-프로젝트 루트 경로에 `.env` 파일을 생성하고 본인의 DB 정보를 입력하세요.
+### ✔ **Authorization**
 
-```ini
-DB_NAME=plantdb
-DB_USER=postgres
-DB_PASSWORD=본인의_DB_비밀번호_입력
-DB_HOST=localhost
-DB_PORT=5432
+* 앱 레벨 RBAC(User/Expert/Content/Admin)
+* DB 레벨 role 생성: `app_admin`, `app_readonly`
+
+### ✔ **Index (권장 요구사항 충족)**
+
+* `idx_species_name`
+* `idx_userplant_user`
+* `idx_request_status`
+* `idx_tx_user_time`
+
+---
+
+# 5. 🗃️ **데이터베이스 스키마 (최종 ERD)**
+
+Proposal Report의 스키마 요구사항과 완전 일치함 ✔ 
+
+> 📌 아래는 요약된 ER 구조(README용).
+> 실제 보고서에는 그림 형태 ERD 포함 권장.
+
+### 핵심 엔티티
+
+* `user_account`
+* `plant_species`
+* `species_step`
+* `user_plant`
+* `quiz_attempt`
+* `transaction_log`
+* `expert_tip`, `tip_report`
+* `plant_request`, `expert_application`
+* `audit_log`
+* `game_config`
+
+### 제약조건
+
+* PK: 모든 테이블 serial/bigserial
+* FK: 대부분 ON DELETE CASCADE
+* UNIQUE(user_id, species_id)
+* CHECK(points >= 0)
+* CHECK(role IN …)
+* CHECK(status IN …)
+
+### Authorization
+
+* Admin만 role 변경 가능
+* Content만 plant/step/quiz CRUD 가능
+* Expert만 tip CUD
+* User는 read/search only
+
+---
+
+# 6. 📊 **통계 및 시각화 (View 기반)**
+
+Admin 페이지에서 조회
+
+### ✔ 식물별 졸업률 (plant_completion_stats)
+
+* GROUP BY + FILTER + CASE
+* Streamlit bar chart 시각화
+
+### ✔ 포인트 분포 (point_distribution)
+
+* 0~999 / 1000~1999 / 2000~2999 buckets
+* bar chart 가능
+
+### ✔ 학과별 활동 통계 (active_department_stats)
+
+* GROUP BY department
+* HAVING COUNT(user_id) ≥ 1
+
+---
+
+# 7. 🧪 **트랜잭션 예시 (핵심 구현)**
+
+### ✔ 정답 처리
+
+```sql
+BEGIN;
+INSERT INTO quiz_attempt ...;
+UPDATE user_account SET points = points + reward;
+INSERT INTO transaction_log ...;
+UPDATE user_plant SET current_step = current_step + 1;
+COMMIT;
 ```
 
-### 5\. DB 연결 테스트
+### ✔ 부활 처리
 
-터미널에서 아래 명령어로 DB 연결이 정상적인지 확인합니다.
-
-```bash
-python db.py
-# 출력: "✅ DB 연결 성공!" 이 뜨면 완료
+```sql
+BEGIN;
+SELECT points FROM user_account FOR UPDATE;
+UPDATE user_account SET points = points - revive_cost;
+INSERT INTO transaction_log ...;
+UPDATE user_plant SET current_step = current_step + 1;
+COMMIT;
 ```
 
-### 6\. 애플리케이션 실행
+→ **원자성 + 동시성 제어** 완전 충족.
 
-```bash
-streamlit run app.py
-```
+---
 
-브라우저가 자동으로 열리며 앱이 시작됩니다. (http://localhost:8501)
+# 8. 🎮 **주요 화면 구성 (Streamlit)**
 
------
+### ✔ 홈 / 도감 검색
 
-## ✨ 주요 기능 및 특징 (Key Features)
+* 상세 필터(난이도, 정렬)
+* 팁 조회 + 신고
+* 없는 식물 요청
 
-### 1\. 사용자 관리 (User Management)
+### ✔ 내 식물 키우기
 
-  * **회원가입**: 대학생 맞춤형 정보(학번, 학과, 이름)를 입력받아 저장합니다.
-  * **RBAC (역할 기반 접근 제어)**:
-      * `User`: 일반 학생 (도감 검색, 게임 플레이)
-      * `Expert`: 식물 전문가 (재배 팁 작성)
-      * `Admin`: 관리자 (통계 확인, 권한 승인, 데이터 관리)
+* 단계별 OX 퀴즈
+* 꽃비 애니메이션 효과
+* 부활/초기화 선택
 
-### 2\. 식물 도감 및 등록 (Search & Register)
+### ✔ 전문가 페이지
 
-  * **검색**: 식물 이름으로 DB를 조회(`LIKE %keyword%`)하여 결과를 카드 형태로 보여줍니다.
-  * **이미지**: 외부 URL을 활용하여 식물 사진을 시각적으로 제공합니다.
-  * **등록**: 마음에 드는 식물을 '내 정원'(`user_plant` 테이블)에 등록합니다. (중복 등록 방지)
+* 팁 작성
+* 내가 쓴 팁 관리(수정/삭제)
 
-### 3\. 게이미피케이션 & 트랜잭션 (Game & Transaction)
+### ✔ 콘텐츠 관리자
 
-  * **단계별 성장**: Seed → Sprout → ... → Fruit 단계로 성장합니다.
-  * **퀴즈 시스템**: 각 단계에 맞는 OX 퀴즈를 풉니다.
-  * **트랜잭션(ACID)**: 정답 시 `[포인트 지급 + 로그 기록 + 식물 단계 상승]`이 하나의 트랜잭션으로 처리되어 데이터 무결성을 보장합니다.
-  * **실패 페널티**:
-      * 1단계 실패: 포인트 즉시 차감.
-      * 2단계 이상 실패: **포인트를 써서 부활(Pass)** 하거나 **처음부터 다시하기(Reset)** 중 선택.
+* 식물 CRUD
+* 퀴즈 CRUD
+* 취약 팁 신고 처리
+* 경제 설정 관리
+* 감사 로그 조회
 
-### 4\. 전문가 및 관리자 시스템 (Expert & Admin)
+### ✔ 시스템 관리자
 
-  * **전문가 신청**: 일반 유저가 신청서를 제출하면 관리자가 심사 후 승인합니다.
-  * **데이터 관리**: 관리자 페이지에서 **새로운 식물과 퀴즈를 폼(Form)으로 쉽게 등록/수정**할 수 있습니다.
-  * **통계 대시보드**: SQL View(`plant_completion_stats`)를 활용하여 식물별 졸업률 등을 시각화합니다.
+* 통계 그래프
+* 권한 관리
+* 사용자 검색
 
------
-
-## 📊 데이터베이스 스키마 다이어그램 (ERD)
-
-*(보고서에 포함된 ERD 그림이 있다면 여기에 이미지 링크를 넣으면 좋습니다)*
-
-  * **User\_Account** (1) : (N) **User\_Plant**
-  * **Plant\_Species** (1) : (N) **User\_Plant**
-  * **Plant\_Species** (1) : (N) **Species\_Step** (퀴즈 정보)
-  * **User\_Account** (1) : (N) **Transaction\_Log** (포인트 내역)
-
------
-
-## 👨‍💻 개발자 (Developer)
-
-  * **이름**: 손정훈
-  * **소속**: 부산대학교 정보컴퓨터공학부 (23학번)
-  * **연락처**: (sjunh02@naver.com)
-
-  * **이름**: 박소영
-  * **소속**: 부산대학교 정보컴퓨터공학부 (23학번)
-  * **연락처**: (kye625@naver.com)
-
------
-
-### 📝 과제 수행 후기 / 노트
-
-  * Streamlit의 `session_state`를 활용하여 로그인 상태를 유지했습니다.
-  * `try-except-rollback` 구문을 사용하여 DB 트랜잭션 안전성을 확보했습니다.
-  * SQL `View`를 활용하여 복잡한 통계 쿼리를 단순화했습니다.
+---
