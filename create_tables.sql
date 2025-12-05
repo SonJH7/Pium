@@ -1,6 +1,7 @@
 -- [1. 기존 테이블/뷰 삭제]
 DROP VIEW IF EXISTS plant_completion_stats CASCADE;
 DROP VIEW IF EXISTS point_distribution CASCADE;
+DROP TABLE IF EXISTS audit_log cascade;        
 DROP TABLE IF EXISTS quiz_attempt CASCADE;
 DROP TABLE IF EXISTS user_plant CASCADE;
 DROP TABLE IF EXISTS expert_tip CASCADE;
@@ -13,124 +14,154 @@ DROP TABLE IF EXISTS plant_species CASCADE;
 DROP TABLE IF EXISTS user_account CASCADE;
 
 -- [2. 테이블 생성]
-CREATE TABLE user_account (
-    user_id        SERIAL PRIMARY KEY,
-    login_id       VARCHAR(50) NOT NULL UNIQUE,
-    password_hash  VARCHAR(255) NOT NULL,
-    student_id     VARCHAR(20),
-    name           VARCHAR(50),
-    department     VARCHAR(100),
-    role           VARCHAR(20) NOT NULL CHECK (role IN ('User','Expert','Content','Admin')),
-    points         INT NOT NULL DEFAULT 1000 CHECK (points >= 0),
-    created_at     TIMESTAMP NOT NULL DEFAULT NOW()
+-- 1. 사용자 계정
+create table user_account (
+    user_id        serial primary key,
+    login_id       varchar(50) not null unique,
+    password_hash  varchar(255) not null,
+    student_id     varchar(20),
+    name           varchar(50),
+    department     varchar(100),
+    role           varchar(20) not null check (role in ('User','Expert','Content','Admin')),
+    points         int not null default 1000 check (points >= 0),
+    created_at     timestamp not null default now()
 );
 
-CREATE TABLE plant_species (
-    species_id     SERIAL PRIMARY KEY,
-    common_name    VARCHAR(100) NOT NULL UNIQUE,
-    category       VARCHAR(20) NOT NULL,
-    difficulty     SMALLINT,
-    sun_level      VARCHAR(20),
-    image_url      TEXT,
-    description    TEXT
+-- 2. 도감 - 종
+create table plant_species (
+    species_id     serial primary key,
+    common_name    varchar(100) not null unique,
+    category       varchar(20) not null,
+    difficulty     smallint,
+    sun_level      varchar(20),
+    image_url      varchar(255),
+    description    text  -- [추가됨] 식물 상세 설명 (긴 글)
 );
 
-CREATE TABLE species_step (
-    step_id        SERIAL PRIMARY KEY,
-    species_id     INT NOT NULL REFERENCES plant_species(species_id) ON DELETE CASCADE,
-    step_order     INT NOT NULL,
-    stage_name     VARCHAR(20) NOT NULL,
-    quiz_question  TEXT NOT NULL,
-    correct_answer BOOLEAN NOT NULL,
-    explanation    TEXT,
-    UNIQUE (species_id, step_order)
+-- 3. 성장 단계 + 퀴즈
+create table species_step (
+    step_id        serial primary key,
+    species_id     int not null references plant_species(species_id) on delete cascade,
+    step_order     int not null,
+    stage_name     varchar(20) not null,
+    quiz_question  text not null,
+    correct_answer boolean not null,
+    explanation    text,
+    unique (species_id, step_order)
 );
 
-CREATE TABLE user_plant (
-    user_plant_id   SERIAL PRIMARY KEY,
-    user_id         INT NOT NULL REFERENCES user_account(user_id) ON DELETE CASCADE,
-    species_id      INT NOT NULL REFERENCES plant_species(species_id) ON DELETE CASCADE,
-    current_step    INT NOT NULL DEFAULT 1,
-    is_completed    BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at      TIMESTAMP NOT NULL DEFAULT NOW(),
-    UNIQUE (user_id, species_id)
+-- 4. 사용자가 키우는 식물 인스턴스
+create table user_plant (
+    user_plant_id   serial primary key,
+    user_id         int not null references user_account(user_id) on delete cascade,
+    species_id      int not null references plant_species(species_id) on delete cascade,
+    current_step    int not null default 1,
+    is_completed    boolean not null default false,
+    created_at      timestamp not null default now(),
+    unique (user_id, species_id)
 );
 
-CREATE TABLE quiz_attempt (
-    attempt_id      SERIAL PRIMARY KEY,
-    user_plant_id   INT NOT NULL REFERENCES user_plant(user_plant_id) ON DELETE CASCADE,
-    step_id         INT NOT NULL REFERENCES species_step(step_id) ON DELETE CASCADE,
-    is_correct      BOOLEAN NOT NULL,
-    used_continue   BOOLEAN NOT NULL DEFAULT FALSE,
-    attempted_at    TIMESTAMP NOT NULL DEFAULT NOW()
+-- 5. 퀴즈 시도 로그
+create table quiz_attempt (
+    attempt_id      serial primary key,
+    user_plant_id   int not null references user_plant(user_plant_id) on delete cascade,
+    step_id         int not null references species_step(step_id) on delete cascade,
+    is_correct      boolean not null,
+    used_continue   boolean not null default false,
+    attempted_at    timestamp not null default now()
 );
 
-CREATE TABLE transaction_log (
-    log_id          BIGSERIAL PRIMARY KEY,
-    user_id         INT NOT NULL REFERENCES user_account(user_id) ON DELETE CASCADE,
-    transaction_type VARCHAR(20) NOT NULL,
-    amount          INT NOT NULL,
-    logged_at       TIMESTAMP NOT NULL DEFAULT NOW()
+-- 6. 포인트(머니) 트랜잭션 로그
+create table transaction_log (
+    log_id          bigserial primary key,
+    user_id         int not null references user_account(user_id) on delete cascade,
+    transaction_type varchar(20) not null,
+    amount          int not null,
+    logged_at       timestamp not null default now()
 );
 
-CREATE TABLE plant_request (
-    request_id      SERIAL PRIMARY KEY,
-    requester_id    INT REFERENCES user_account(user_id),
-    plant_name      VARCHAR(100) NOT NULL,
-    status          VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','DONE','REJECTED')),
-    created_at      TIMESTAMP NOT NULL DEFAULT NOW(),
-    processed_by    INT REFERENCES user_account(user_id)
+-- 7. 정보 신청
+create table plant_request (
+    request_id      serial primary key,
+    requester_id    int references user_account(user_id),
+    plant_name      varchar(100) not null,
+    status          varchar(20) not null default 'PENDING'
+                    check (status in ('PENDING','DONE','REJECTED')),
+    created_at      timestamp not null default now(),
+    processed_by    int references user_account(user_id)
 );
 
-CREATE TABLE expert_application (
-    user_id         INT PRIMARY KEY REFERENCES user_account(user_id) ON DELETE CASCADE,
-    request_text    TEXT NOT NULL,
-    status          VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','APPROVED','REJECTED')),
-    decided_by      INT REFERENCES user_account(user_id),
-    decided_at      TIMESTAMP
+-- 8. 전문가 신청
+create table expert_application (
+    user_id         int primary key references user_account(user_id) on delete cascade,
+    request_text    text not null,
+    status          varchar(20) not null default 'PENDING'
+                    check (status in ('PENDING','APPROVED','REJECTED')),
+    decided_by      int references user_account(user_id),
+    decided_at      timestamp
 );
 
-CREATE TABLE expert_tip (
-    tip_id          SERIAL PRIMARY KEY,
-    expert_id       INT NOT NULL REFERENCES user_account(user_id) ON DELETE CASCADE,
-    species_id      INT NOT NULL REFERENCES plant_species(species_id) ON DELETE CASCADE,
-    step_id         INT REFERENCES species_step(step_id),
-    title           VARCHAR(100) NOT NULL,
-    content         TEXT NOT NULL,
-    created_at      TIMESTAMP NOT NULL DEFAULT NOW()
+-- 9. 전문가 팁 (수정됨)
+create table expert_tip (
+    tip_id          serial primary key,
+    expert_id       int not null references user_account(user_id) on delete cascade,
+    species_id      int not null references plant_species(species_id) on delete cascade,
+    title           varchar(100) not null,
+    content         text not null,
+    is_hidden       boolean default false, -- [추가됨] 신고/부적절 글 숨김 여부
+    created_at      timestamp not null default now()
 );
 
-CREATE TABLE game_config (
-    config_key      VARCHAR(40) PRIMARY KEY,
-    config_value    VARCHAR(64) NOT NULL
+-- 10. 감사 로그 (Audit Log) - [신규 테이블]
+create table audit_log (
+    log_id      serial primary key,
+    admin_id    int references user_account(user_id), -- 누가 (관리자)
+    action_type varchar(50) not null,                 -- 무슨 행동을
+    target_id   int,                                  -- 대상 ID (식물ID, 팁ID 등)
+    details     text,                                 -- 상세 내용
+    ip_address  varchar(50),                          -- 접속 IP (선택사항)
+    created_at  timestamp default now()               -- 언제
 );
 
--- [3. 뷰(View) 생성] - 중요! 이거 없으면 관리자 페이지 에러 남
-CREATE OR REPLACE VIEW plant_completion_stats AS
-SELECT
+-- 11. 게임 설정
+create table game_config (
+    config_key      varchar(40) primary key,
+    config_value    varchar(64) not null
+);
+
+-- 12. 인덱스
+create index idx_species_name on plant_species(common_name);
+create index idx_userplant_user on user_plant(user_id);
+create index idx_request_status on plant_request(status);
+create index idx_tx_user_time on transaction_log(user_id, logged_at);
+create index idx_audit_time on audit_log(created_at); -- 감사 로그 조회용 인덱스
+
+-- 13. 통계용 VIEW
+create or replace view plant_completion_stats as
+select
   s.species_id,
   s.common_name,
   s.category,
-  COUNT(DISTINCT up.user_id) AS total_users,
-  COUNT(DISTINCT up.user_id) FILTER (WHERE up.is_completed) AS completed_users,
-  CASE
-    WHEN COUNT(DISTINCT up.user_id) = 0 THEN 0
-    ELSE ROUND(
-      100.0 * COUNT(DISTINCT up.user_id) FILTER (WHERE up.is_completed)
-      / COUNT(DISTINCT up.user_id)
+  count(distinct up.user_id) as total_users,
+  count(distinct up.user_id) filter (where up.is_completed) as completed_users,
+  case
+    when count(distinct up.user_id) = 0 then 0
+    else round(
+      100.0 * count(distinct up.user_id) filter (where up.is_completed)
+      / count(distinct up.user_id)
     , 1)
-  END AS completion_rate
-FROM plant_species s
-LEFT JOIN user_plant up ON s.species_id = up.species_id
-GROUP BY s.species_id, s.common_name, s.category;
+  end as completion_rate
+from plant_species s
+left join user_plant up on s.species_id = up.species_id
+group by s.species_id, s.common_name, s.category;
 
-CREATE OR REPLACE VIEW point_distribution AS
-SELECT
-  (points / 1000) * 1000 AS bucket_start,
-  COUNT(*) AS user_count
-FROM user_account
-GROUP BY bucket_start
-ORDER BY bucket_start;
+create or replace view point_distribution as
+select
+  (points / 1000) * 1000 as bucket_start,
+  count(*) as user_count
+from user_account
+group by bucket_start
+order by bucket_start;
 
 -- [4. 기초 데이터 입력]
 INSERT INTO user_account(login_id, password_hash, student_id, name, department, role, points) VALUES
