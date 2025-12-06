@@ -4,6 +4,15 @@ from db import get_conn
 # [추가] 꽃비 효과를 위한 라이브러리 임포트
 from streamlit_extras.let_it_rain import rain 
 
+def get_config_value(cursor, key, default_val):
+    """DB에서 게임 설정값을 가져오는 헬퍼 함수"""
+    try:
+        cursor.execute("SELECT config_value FROM game_config WHERE config_key = %s", (key,))
+        row = cursor.fetchone()
+        return int(row[0]) if row else default_val
+    except:
+        return default_val
+
 def get_user_plants(user_id):
     """사용자가 키우고 있는 식물 목록 가져오기"""
     conn = get_conn()
@@ -43,7 +52,7 @@ def process_correct_answer(user_plant_id, step_id, user_id):
     try:
         cursor.execute("INSERT INTO quiz_attempt(user_plant_id, step_id, is_correct) VALUES (%s, %s, true)", (user_plant_id, step_id))
         
-        reward = 100
+        reward = get_config_value(cursor, 'quiz_reward', 100) # DB에서 값 가져오기
         cursor.execute("UPDATE user_account SET points = points + %s WHERE user_id = %s", (reward, user_id))
         cursor.execute("INSERT INTO transaction_log(user_id, transaction_type, amount) VALUES (%s, 'QUIZ_REWARD', %s)", (user_id, reward))
         
@@ -95,7 +104,7 @@ def apply_rescue_option(user_plant_id, user_id, step_id):
     """옵션 A: 포인트 쓰고 강제 통과"""
     conn = get_conn()
     cursor = conn.cursor()
-    cost = 300 
+    cost = get_config_value(cursor, 'revive_cost', 300) # DB에서 값 가져오기
     try:
         cursor.execute("SELECT points FROM user_account WHERE user_id=%s", (user_id,))
         current_points = cursor.fetchone()[0]
@@ -188,11 +197,15 @@ def game_view():
     if st.session_state[state_key] == 'failed_high':
         st.error(f"❌ 틀렸습니다! ({expl})")
         st.warning("🚨 위기 상황! 선택하세요.")
-        
+        # [추가된 부분] 화면에 표시할 비용을 DB에서 잠깐 조회해옴
+        conn_tmp = get_conn()
+        cur_tmp = conn_tmp.cursor()
+        current_revive_cost = get_config_value(cur_tmp, 'revive_cost', 300)
+        conn_tmp.close()
+
         c1, c2 = st.columns(2)
         with c1:
-            cost = 300
-            if st.button(f"💸 {cost}P 내고 넘어가기", use_container_width=True):
+            if st.button(f"💸 {current_revive_cost}P 내고 넘어가기", use_container_width=True):
                 success, msg = apply_rescue_option(u_plant_id, user['user_id'], step_id)
                 if success:
                     st.session_state['celebrate_msg'] = msg
