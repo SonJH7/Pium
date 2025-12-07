@@ -101,27 +101,54 @@ def apply_step1_penalty(user_plant_id, step_id, user_id):
         conn.close()
 
 def apply_rescue_option(user_plant_id, user_id, step_id):
-    """옵션 A: 포인트 쓰고 강제 통과"""
+    """옵션 A: 포인트 쓰고 강제 통과 (안전성 보강 버전)"""
     conn = get_conn()
     cursor = conn.cursor()
-    cost = get_config_value(cursor, 'revive_cost', 300) # DB에서 값 가져오기
+    # DB에서 비용 가져오기
+    cost = get_config_value(cursor, 'revive_cost', 300)
+
     try:
+        # 1. 포인트 잔액 확인
         cursor.execute("SELECT points FROM user_account WHERE user_id=%s", (user_id,))
         current_points = cursor.fetchone()[0]
+
         if current_points < cost:
             return False, "포인트가 부족합니다!"
 
+        # 2. 포인트 차감 및 로그 기록
         cursor.execute("UPDATE user_account SET points = points - %s WHERE user_id = %s", (cost, user_id))
         cursor.execute("INSERT INTO transaction_log(user_id, transaction_type, amount) VALUES (%s, 'FORCE_PASS', %s)", (user_id, -cost))
-        cursor.execute("UPDATE user_plant SET current_step = current_step + 1 WHERE user_plant_id = %s", (user_plant_id,))
+
+        # 3. 현재 식물 정보 조회 (species_id, current_step)
+        cursor.execute("SELECT species_id, current_step FROM user_plant WHERE user_plant_id = %s", (user_plant_id,))
+        row = cursor.fetchone()
+        species_id, current_step = row[0], row[1]
+
+        # 4. 해당 종의 '최대 단계' 조회
+        cursor.execute("SELECT MAX(step_order) FROM species_step WHERE species_id = %s", (species_id,))
+        max_step = cursor.fetchone()[0]
+
+        # 5. 오답 시도 로그 (부활 사용 표시)
         cursor.execute("INSERT INTO quiz_attempt(user_plant_id, step_id, is_correct, used_continue) VALUES (%s, %s, false, true)", (user_plant_id, step_id))
 
+        # 6. 단계 상승 로직 (졸업 체크)
+        if current_step >= max_step:
+            # 이미 마지막 단계였으면 졸업 처리
+            cursor.execute("UPDATE user_plant SET is_completed = true WHERE user_plant_id = %s", (user_plant_id,))
+            msg = f"💸 {cost}P를 사용하여 위기를 넘기고 졸업했습니다! 🎓"
+        else:
+            # 다음 단계로 이동
+            cursor.execute("UPDATE user_plant SET current_step = current_step + 1 WHERE user_plant_id = %s", (user_plant_id,))
+            msg = f"💸 {cost}P를 사용하여 위기를 넘겼습니다! 다음 단계로 성장합니다. 🌱"
+
+        # 7. 세션 업데이트 및 커밋
         st.session_state.user['points'] -= cost
         conn.commit()
-        return True, f"💸 {cost}포인트를 써서 위기를 모면했습니다! 다음 단계로 넘어갑니다."
+        return True, msg
+
     except Exception as e:
         conn.rollback()
-        return False, f"오류: {e}"
+        return False, f"오류 발생: {e}"
     finally:
         conn.close()
 
